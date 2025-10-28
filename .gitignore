@@ -1,0 +1,12 @@
+.Rhistory
+*.html
+
+data/raw/**/*.*
+!data/raw/**/*.md
+
+output/out_model/**/*.*
+output/validation_model/**/*.*
+!output/out_model/**/*.md
+
+
+.Rproj.user
