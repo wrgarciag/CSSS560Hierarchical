@@ -1,0 +1,169 @@
+---
+title: "Modeling the Relationship Between Hypertension and Income Using the PSID"
+subtitle: "A Methodological Overview"
+author: "William Garcia"
+institute: "University of Washington. PhD student, Health Metrics and Implementation Science"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  beamer_presentation:
+    theme: "default"
+    colortheme: "dolphin"
+    fonttheme: "professionalfonts"
+    slide_level: 1
+    toc: false
+    incremental: false
+#classoption: "aspectratio=169"
+fontsize: 11pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(lme4)
+library(haven)
+library(broom.mixed)
+```
+
+# Introduction
+
+- **Hypertension** is a leading modifiable risk factor for cardiovascular disease and premature mortality. 
+
+- Socioeconomic disparities play a key role in its prevalence, control, and consequences.  
+
+- Using the **Panel Study of Income Dynamics (PSID)**, we can analyze how **income and hypertension** interact over time.  
+
+# Data Source: PSID
+
+- Nationally representative U.S. household panel survey (since 1968).  
+- Collects information on **income, demographics, and health** for all household members.  
+- **Hypertension data** collected biennially from **1999–2023**.  
+- Two analysis levels:
+  - **Individual level:** How hypertension affects personal income.
+  - **Household level:** How hypertension affects household income.
+
+```{r psid-import, eval=FALSE}
+# Example: reading PSID SAS data file
+library(haven)
+psid_2023 <- read_sas("data/FAM2023ER.sas7bdat")
+
+# Keep relevant hypertension variables
+psid_2023 <- psid_2023 %>%
+  select(ER85812, ER84572, ER84773, ER70660, ER70672,
+         ER84574, ER84775, ER70671, ER70673)
+```
+
+# Sample Selection
+
+- Focus on years: **2021-2023**.
+- Include households with complete hypertension and income data.
+- Head of family ($\geq 18$  years) as this group report their own physician-diagnosis hypertension.
+
+
+# Variables of Interest
+
+- Hypertension was assessed with a question: Has a doctor or other health professional ever told you that you [i.e., Head of Family] had high blood pressure or hypertension?
+
+| Concept | Variable Example | Description |
+|----------|------------------|-------------|
+| Hypertension (RP) | `ER84572` | Whether Reference Person has hypertension |
+| Age of onset | `ER84574` / `ER84775` | Age when first diagnosed |
+| Income | `ER70660` | Total family income |
+
+# Descriptive Statistics
+
+```{r desc, eval=FALSE}
+summary(psid_2023$ER84572)
+summary(psid_2023$ER84773)
+
+# Compute household hypertension indicator
+psid_2023 <- psid_2023 %>%
+  mutate(any_htn = if_else(ER84572 == 1 | ER84773 == 1, 1, 0))
+```
+
+```{r table, echo=FALSE, eval=FALSE}
+# Example descriptive table
+psid_2023 %>%
+  summarise(
+    mean_hypertension = mean(any_htn, na.rm = TRUE),
+    mean_income = mean(ER70660, na.rm = TRUE)
+  )
+```
+
+# Modeling Strategy
+
+- The **panel nature** of PSID allows controlling for unobserved individual heterogeneity.  
+- We estimate both:
+  1. **Fixed-effects model**: Within-person variation.
+  2. **Hierarchical (random-effects) model**: Between-person variation.
+
+# Model Equations
+
+-  Hypertension → Income
+\[
+\log(Y_{it}) = \alpha_0 + \alpha_1 \text{HTN}_{it} + \alpha_2 X_{it} + \eta_i + \nu_{it}
+\]
+
+where \( u_i, \eta_i \) are individual random effects.
+
+# Example: Hierarchical Model
+
+```{r model, eval=FALSE}
+model_htn_income <- lmer(log(income) ~ hypertension + age + education + (1 | pid),
+                         data = psid_panel)
+summary(model_htn_income)
+```
+
+# Interpreting Coefficients
+
+- **\(\alpha_1 < 0\)** → Hypertension is associated with **lower income**.  
+- **Within-person effect:** how income changes after diagnosis.  
+- **Between-person effect:** differences across individuals.
+
+# Incorporating Sampling Weights
+
+- Use PSID weights (e.g., `ER85812` for 2023).  
+- Normalize within-year for pooled models:
+```{r weight, eval=FALSE}
+psid_panel <- psid_panel %>%
+  group_by(year) %>%
+  mutate(w_norm = ER85812 / mean(ER85812, na.rm = TRUE))
+```
+
+- Apply as analytic weights:
+```{r feols, eval=FALSE}
+library(fixest)
+feols(log(income) ~ hypertension + age + education | pid + year,
+      data = psid_panel, weights = ~w_norm)
+```
+
+# Results (Example Output)
+
+```{r results, echo=FALSE, eval=FALSE}
+tidy(model_htn_income, conf.int = TRUE)
+```
+
+| Variable | Estimate | 95% CI | p-value |
+|-----------|-----------|--------|---------|
+| Hypertension | -0.05 | [-0.08, -0.02] | 0.004 |
+| Age | 0.01 | [0.008, 0.012] | < 0.001 |
+| Education | 0.03 | [0.02, 0.04] | < 0.001 |
+
+# Discussion
+
+- Persistent **negative association** between hypertension and household income.  
+- Highlights the **economic burden of chronic disease** and potential for **health-inequality feedback loops**.  
+- Suggests the need for targeted prevention and social protection strategies.
+
+# Limitations and Next Steps
+
+- Self-reported hypertension (possible underreporting).  
+- Income measurement error and top-coding.  
+- Explore **causal identification** (e.g., lagged models, IVs, or event-study).  
+- Extend to other chronic diseases (diabetes, heart disease).
+
+# References
+
+- Gertler, P. & Gruber, J. (2002). *Insuring Consumption Against Illness.* AER.  
+- Currie, J. & Madrian, B. (1999). *Health, Health Insurance and the Labor Market.*  
+- PSID User Guide (2023). Institute for Social Research, University of Michigan.
+

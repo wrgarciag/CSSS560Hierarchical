@@ -1,8 +1,8 @@
 .Rhistory
 *.html
 
-data/raw/**/*.*
-!data/raw/**/*.md
+data/PSID/**/*.*
+!data/PSID/**/*.md
 
 output/out_model/**/*.*
 output/validation_model/**/*.*
